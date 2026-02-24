@@ -89,7 +89,7 @@ export const unlockNextMilestone = async (req, res) => {
 
         if (milestoneId !== "completed") {
             if (progress[milestoneId]?.unlocked) {
-                
+
                 return res.json({ message: 'Milestone already unlocked.' });
             }
         }

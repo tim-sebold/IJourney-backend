@@ -3,7 +3,7 @@ import {
     getMilestoneResponse,
     getMilestoneContent,
     submitMilestoneResponse,
-    unlockNextMilestone
+    unlockNextMilestone,
 } from '../controllers/courseController.js';
 
 const router = express.Router();
