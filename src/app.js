@@ -6,6 +6,7 @@ import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import courseRoutes from './routes/courseRoutes.js';
+import certificateRoutes from './routes/certificateRoutes.js';
 // import chatbotRoutes from './routes/chatbotRoutes.js';
 
 import { verifyAdminRole, verifyFirebaseToken } from './middleware/authMiddleware.js';
@@ -24,6 +25,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', verifyFirebaseToken, userRoutes);
 app.use('/api/admin', verifyFirebaseToken, verifyAdminRole, adminRoutes);
 app.use('/api/courses', verifyFirebaseToken, courseRoutes);
+app.use('/api/certificates', verifyFirebaseToken, certificateRoutes);
 // app.use('/api/chatbot', chatbotRoutes);
 
 app.use(errorHandler);
