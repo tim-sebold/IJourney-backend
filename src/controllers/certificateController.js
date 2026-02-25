@@ -1,17 +1,11 @@
 import PDFDocument from "pdfkit";
 import { admin } from "../config/firebaseAdmin.js";
+import { fetchAllSubmittedMilestones, normalizeMilestoneResponses } from "../services/courseService.js";
 
-/**
- * You MUST list the milestone keys you require.
- * Start simple: require milestone7_4 only OR full list.
- */
-const REQUIRED_MILESTONES = [
-    // Strong (recommended): include everything required
-    // Example for milestone 7 only:
-    "milestone7_1",
-    "milestone7_2",
-    "milestone7_3",
-    "milestone7_4",
+const FINAL_MILESTONE_KEY = "milestone7/4";
+
+const REQUIRED_MILESTONE_KEYS = [
+    "milestone7/4"
 ];
 
 function makeCertificateId() {
@@ -20,148 +14,97 @@ function makeCertificateId() {
     return `IJ-${year}-${rand}`;
 }
 
-async function assertCourseCompleted(uid) {
+async function assertCompletedViaProgress(uid) {
     const db = admin.firestore();
-    const base = db.collection("responses").doc(uid).collection("milestones");
+    const snap = await db.collection("progress").doc(uid).get();
+    if (!snap.exists) throw new Error("No progress found.");
 
-    const snaps = await Promise.all(REQUIRED_MILESTONES.map((k) => base.doc(k).get()));
+    const data = snap.data();
 
-    const missing = [];
-    const notSubmitted = [];
-
-    snaps.forEach((snap, idx) => {
-        const key = REQUIRED_MILESTONES[idx];
-        if (!snap.exists) missing.push(key);
-        else if (snap.data()?.status !== "submitted") notSubmitted.push(key);
+    const missingOrIncomplete = REQUIRED_MILESTONE_KEYS.filter((k) => {
+        const node = data?.[k];
+        return !(node && node.completed === true);
     });
 
-    if (missing.length || notSubmitted.length) {
-        const parts = [];
-        if (missing.length) parts.push(`missing: ${missing.join(", ")}`);
-        if (notSubmitted.length) parts.push(`not submitted: ${notSubmitted.join(", ")}`);
-        throw new Error(`Course not completed (${parts.join(" | ")}).`);
+    if (missingOrIncomplete.length) {
+        throw new Error(`Course not completed (incomplete: ${missingOrIncomplete.join(", ")}).`);
     }
+
+    return data;
 }
 
-function buildPdfBuffer({ issuedToName, certificateId, issuedAt, verifyUrl }) {
-    return new Promise((resolve) => {
-        const doc = new PDFDocument({ size: "A4", margin: 50 });
-        const chunks = [];
-
-        doc.on("data", (c) => chunks.push(c));
-        doc.on("end", () => resolve(Buffer.concat(chunks)));
-
-        doc.fontSize(26).text("Certificate of Completion", { align: "center" });
-        doc.moveDown(0.5);
-        doc.fontSize(16).text("iJourney: A Path to Purpose", { align: "center" });
-
-        doc.moveDown(2);
-        doc.fontSize(14).text("This certifies that", { align: "center" });
-        doc.moveDown(0.8);
-        doc.fontSize(22).text(issuedToName || "Participant", { align: "center" });
-
-        doc.moveDown(2);
-        doc.fontSize(12).text(`Certificate ID: ${certificateId}`, { align: "center" });
-        doc.fontSize(12).text(`Issued on: ${new Date(issuedAt).toDateString()}`, { align: "center" });
-
-        doc.moveDown(2);
-        doc.fontSize(10).text(`Verify at: ${verifyUrl}`, { align: "center" });
-
-        doc.end();
-    });
-}
-
-/**
- * POST /api/certificates/download
- * - uses uid from Firebase token
- * - checks completion from responses/{uid}/milestones
- * - creates or reuses cert doc in certificates collection
- * - returns PDF
- */
 export async function downloadCertificate(req, res) {
     try {
-        console.log("req");
-        
         const uid = req.user.uid;
         const db = admin.firestore();
 
-        await assertCourseCompleted(uid);
+        await assertCompletedViaProgress(uid);
 
-        // Get user name (best effort)
         const userSnap = await db.collection("users").doc(uid).get();
-        const userData = userSnap.exists ? userSnap.data() : {};
-        const issuedToName =
-            userData?.displayName ||
-            userData?.name ||
-            req.user.name ||
-            req.user.email ||
-            "Participant";
+        const user = userSnap.exists ? userSnap.data() : {};
+        const issuedToName = user?.displayName || user?.name || req.user.name || req.user.email || "Participant";
 
-        // Reuse existing certificate for this user/course if exists
-        const existing = await db
-            .collection("certificates")
-            .where("userId", "==", uid)
-            .where("courseId", "==", "ijourney")
-            .limit(1)
-            .get();
+        const progressRef = db.collection("progress").doc(uid);
+        const progressSnap = await progressRef.get();
+        const progressData = progressSnap.data() || {};
 
-        let certificateId;
+        let cert = progressData.certificate;
 
-        if (!existing.empty) {
-            certificateId = existing.docs[0].id;
-        } else {
-            certificateId = makeCertificateId();
-            await db.collection("certificates").doc(certificateId).set({
-                certificateId,
-                userId: uid,
-                courseId: "ijourney",
-                issuedToName,
-                milestoneKey: "milestone7_4",
+        if (!cert?.certificateId) {
+            cert = {
+                certificateId: makeCertificateId(),
                 issuedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
+                issuedToName,
+                courseId: "ijourney",
+                finalMilestoneKey: FINAL_MILESTONE_KEY,
+            };
+            await progressRef.set({ certificate: cert }, { merge: true });
+
+            const refreshed = await progressRef.get();
+            cert = refreshed.data()?.certificate;
         }
 
-        const certSnap = await db.collection("certificates").doc(certificateId).get();
-        const cert = certSnap.data();
-        const issuedAt = cert?.issuedAt?.toDate?.() || new Date();
-
+        const certificateId = cert.certificateId;
+        const issuedAt = cert.issuedAt?.toDate?.() || new Date();
         const verifyUrl = `https://i-journey.org/verify/${certificateId}`;
 
-        const pdf = await buildPdfBuffer({
+        const milestones = await fetchAllSubmittedMilestones(uid);
+        console.log("milestones:", milestones);
+
+        const pdf = await buildPdfWithMilestones({
             issuedToName: cert.issuedToName,
             certificateId,
             issuedAt,
             verifyUrl,
+            milestones,
         });
 
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader(
-            "Content-Disposition",
-            `attachment; filename="iJourney-Certificate-${certificateId}.pdf"`
-        );
-
+        res.setHeader("Content-Disposition", `attachment; filename="iJourney-Certificate-${certificateId}.pdf"`);
         return res.status(200).send(pdf);
     } catch (e) {
-        const message = e instanceof Error ? e.message : "Failed to download certificate.";
-        return res.status(400).json({ error: message });
+        return res.status(400).json({ error: e instanceof Error ? e.message : "Download failed." });
     }
 }
 
-/**
- * GET /api/certificates/verify/:certificateId
- * Public endpoint used by the verification page
- */
 export async function verifyCertificate(req, res) {
     try {
         const { certificateId } = req.params;
         const db = admin.firestore();
 
-        const snap = await db.collection("certificates").doc(certificateId).get();
-        if (!snap.exists) {
+        const q = await db
+            .collection("progress")
+            .where("certificate.certificateId", "==", certificateId)
+            .limit(1)
+            .get();
+
+        if (q.empty) {
             return res.status(404).json({ valid: false, error: "Certificate not found." });
         }
 
-        const cert = snap.data();
+        const doc = q.docs[0].data();
+        const cert = doc.certificate;
+
         return res.json({
             valid: true,
             certificateId: cert.certificateId,
@@ -172,4 +115,64 @@ export async function verifyCertificate(req, res) {
     } catch (e) {
         return res.status(500).json({ valid: false, error: "Verification failed." });
     }
+}
+
+export const addCertificateCoverPage = (doc, { issuedToName, certificateId, issuedAt, verifyUrl }) => {
+    doc.fontSize(26).text("Certificate of Completion", { align: "center" });
+    doc.moveDown(0.5);
+    doc.fontSize(16).text("iJourney: A Path to Purpose", { align: "center" });
+
+    doc.moveDown(2);
+    doc.fontSize(14).text("This certifies that", { align: "center" });
+    doc.moveDown(0.8);
+    doc.fontSize(22).text(issuedToName || "Participant", { align: "center" });
+
+    doc.moveDown(2);
+    doc.fontSize(12).text(`Certificate ID: ${certificateId}`, { align: "center" });
+    doc.fontSize(12).text(`Issued on: ${new Date(issuedAt).toDateString()}`, { align: "center" });
+
+    doc.moveDown(2);
+    doc.fontSize(10).text(`Verify at: ${verifyUrl}`, { align: "center" });
+}
+
+export const addMilestoneSection = (doc, milestoneId, entries) => {
+    doc.addPage();
+    doc.fontSize(18).text(`Milestone: ${milestoneId}`, { underline: true });
+    doc.moveDown(1);
+
+    if (!entries.length) {
+        doc.fontSize(12).text("No responses saved.");
+        return;
+    }
+
+    entries.forEach(({ key, value }) => {
+        doc.fontSize(12).text(`${key}:`, { continued: false });
+        doc.fontSize(11).text(value || "-", { indent: 20 });
+        doc.moveDown(0.6);
+    });
+}
+
+export const buildPdfWithMilestones = async ({
+    issuedToName,
+    certificateId,
+    issuedAt,
+    verifyUrl,
+    milestones,
+}) => {
+    return new Promise((resolve) => {
+        const doc = new PDFDocument({ size: "A4", margin: 50 });
+        const chunks = [];
+
+        doc.on("data", (c) => chunks.push(c));
+        doc.on("end", () => resolve(Buffer.concat(chunks)));
+
+        addCertificateCoverPage(doc, { issuedToName, certificateId, issuedAt, verifyUrl });
+
+        milestones.forEach((m) => {
+            const entries = normalizeMilestoneResponses(m);
+            addMilestoneSection(doc, m.id, entries);
+        });
+
+        doc.end();
+    });
 }

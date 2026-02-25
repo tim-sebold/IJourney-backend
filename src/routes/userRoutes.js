@@ -3,13 +3,10 @@ import { getUserProfile, updateUserProfile, getUserProgress } from '../controlle
 
 const router = express.Router();
 
-// GET /user/profile
 router.get('/profile', getUserProfile);
 
-// PUT /user/profile
 router.put('/profile', updateUserProfile);
 
-// GET /user/progress
 router.get('/progress', getUserProgress);
 
 export default router;
