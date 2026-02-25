@@ -4,10 +4,8 @@ import { downloadCertificate, verifyCertificate } from "../controllers/certifica
 
 const router = express.Router();
 
-// Authenticated: issue/reuse + download PDF
 router.post("/download", verifyFirebaseToken, downloadCertificate);
 
-// Public: verify certificate
-router.get("/verify/:certificateId", verifyFirebaseToken, verifyCertificate);
+router.get("/verify/:certificateId", verifyCertificate);
 
 export default router;

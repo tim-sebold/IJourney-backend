@@ -4,7 +4,6 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// Build the service account object from environment variables
 import serviceAccount from "../serviceAccount.json" with { type: "json" };
 // const serviceAccount = {
 //     type: process.env.FIREBASE_TYPE,

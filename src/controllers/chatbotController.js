@@ -1,4 +1,3 @@
-// controllers/chatbotController.js
 import { getFirestore } from 'firebase-admin/firestore';
 import { getChatbotResponse } from '../services/vertexAIservice.js';
 import { extractFormFields } from '../utils/formParser.js';
