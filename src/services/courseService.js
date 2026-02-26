@@ -64,6 +64,11 @@ export const fetchAllSubmittedMilestones = async (uid) => {
     return docs;
 }
 
+function clampText(s, max = 800) {
+  if (!s) return "";
+  return s.length > max ? s.slice(0, max) + "…(truncated)" : s;
+}
+
 export const formatResponseValue = (v) => {
     if (v == null) return "";
     if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return String(v);
@@ -76,7 +81,7 @@ export const normalizeMilestoneResponses = (milestoneDoc) => {
     const responses = milestoneDoc.responses || {};
     const entries = Object.entries(responses).map(([k, v]) => ({
         key: k,
-        value: formatResponseValue(v),
+        value: clampText(formatResponseValue(v)),
     }));
 
     entries.sort((a, b) => {

@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import { admin } from "../config/firebaseAdmin.js";
 import { fetchAllSubmittedMilestones, normalizeMilestoneResponses } from "../services/courseService.js";
+import { drawKeyValue, drawSectionHeader, ensureSpace } from "../utils/pdf.js";
 
 const FINAL_MILESTONE_KEY = "milestone7/4";
 
@@ -166,11 +167,33 @@ export const buildPdfWithMilestones = async ({
         doc.on("data", (c) => chunks.push(c));
         doc.on("end", () => resolve(Buffer.concat(chunks)));
 
+        // ---- Cover page (keep as-is) ----
         addCertificateCoverPage(doc, { issuedToName, certificateId, issuedAt, verifyUrl });
 
+        // Move to summary section on SAME PAGE if space, otherwise add only one page
+        doc.moveDown(2);
+        const summaryTitle = "Your Milestone Responses (Summary)";
+        ensureSpace(doc, doc.heightOfString(summaryTitle) + 20);
+        doc.fontSize(16).text(summaryTitle);
+        doc.moveDown(0.5);
+        doc.fontSize(10).text(
+            "This summary includes your submitted milestone entries.",
+            { opacity: 0.9 }
+        );
+        doc.moveDown(1);
+
         milestones.forEach((m) => {
-            const entries = normalizeMilestoneResponses(m);
-            addMilestoneSection(doc, m.id, entries);
+            const entries = normalizeMilestoneResponses(m); // your existing function
+            drawSectionHeader(doc, `Milestone: ${m.id}`);
+
+            if (!entries.length) {
+                drawKeyValue(doc, "Responses", "No responses saved.");
+                return;
+            }
+
+            entries.forEach(({ key, value }) => {
+                drawKeyValue(doc, key, value);
+            });
         });
 
         doc.end();
