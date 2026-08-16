@@ -4,9 +4,15 @@ import {
     getMilestoneContent,
     submitMilestoneResponse,
     unlockNextMilestone,
+    saveDraftResponse,
+    getAllMilestones,
 } from '../controllers/courseController.js';
 
 const router = express.Router();
+
+router.get('/', getAllMilestones);
+
+router.post('/unlock', unlockNextMilestone);
 
 router.get('/:milestoneId/getResponse', getMilestoneResponse);
 
@@ -14,6 +20,6 @@ router.get('/:milestoneId', getMilestoneContent);
 
 router.post('/:milestoneId/submit', submitMilestoneResponse);
 
-router.post('/unlock', unlockNextMilestone);
+router.post('/:milestoneId/draft', saveDraftResponse);
 
 export default router;

@@ -21,8 +21,6 @@ export const getMilestoneResponse = async (req, res) => {
         const { milestoneId } = req.params;
         const userId = req.user.uid;
 
-        console.log(milestoneId)
-
         const doc = await db.collection('responses').doc(userId)
             .collection('milestones').doc(milestoneId).get();
 
@@ -31,17 +29,18 @@ export const getMilestoneResponse = async (req, res) => {
 
         res.json({ id: doc.id, ...doc.data() });
     } catch (error) {
-
+        res.status(500).json({ error: error.message });
     }
 }
 
 export const submitMilestoneResponse = async (req, res) => {
     try {
         const { milestoneId } = req.params;
-        const { userId, responses } = req.body;
+        const userId = req.user.uid;
+        const { responses } = req.body;
 
-        if (!userId || !responses) {
-            return res.status(400).json({ error: "Missing userId or responses." });
+        if (!responses || typeof responses !== 'object' || Array.isArray(responses)) {
+            return res.status(400).json({ error: "Missing or invalid responses." });
         }
 
         await db.collection('responses').doc(userId)
@@ -82,7 +81,12 @@ export const getUserProgress = async (req, res) => {
 
 export const unlockNextMilestone = async (req, res) => {
     try {
-        const { userId, milestoneId, prevMilestoneId } = req.body;
+        const userId = req.user.uid;
+        const { milestoneId, prevMilestoneId } = req.body;
+
+        if (!milestoneId || !prevMilestoneId) {
+            return res.status(400).json({ error: 'Missing milestoneId or prevMilestoneId.' });
+        }
 
         const userProgressRef = db.collection('progress').doc(userId);
         const progress = (await userProgressRef.get()).data() || {};
@@ -118,15 +122,17 @@ export const unlockNextMilestone = async (req, res) => {
 
 export const saveDraftResponse = async (req, res) => {
     try {
-        const { userId, milestoneId, responses } = req.body;
+        const userId = req.user.uid;
+        const { milestoneId } = req.params;
+        const { responses } = req.body;
 
-        await db.collection('responses').add({
-            userId,
-            milestoneId,
-            responses,
-            updatedAt: new Date(),
-            status: 'draft'
-        });
+        if (!responses || typeof responses !== 'object' || Array.isArray(responses)) {
+            return res.status(400).json({ error: 'Missing or invalid responses.' });
+        }
+
+        await db.collection('responses').doc(userId)
+            .collection('milestones').doc(milestoneId)
+            .set({ responses, updatedAt: new Date(), status: 'draft' }, { merge: true });
 
         res.status(200).json({ message: 'Draft saved successfully.' });
     } catch (error) {

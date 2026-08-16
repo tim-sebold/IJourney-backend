@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-import serviceAccount from "../../serviceAccount.json" with { type: "json" };
+import serviceAccount from "../serviceAccount.json" with { type: "json" };
 
 if (!admin.apps.length) {
     admin.initializeApp({

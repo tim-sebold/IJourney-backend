@@ -1,4 +1,5 @@
 import { getFirestore } from 'firebase-admin/firestore';
+import admin from 'firebase-admin';
 const db = getFirestore();
 
 export const getAllUsers = async (req, res) => {

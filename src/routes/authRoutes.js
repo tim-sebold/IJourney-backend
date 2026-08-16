@@ -7,6 +7,7 @@ import {
   refreshToken,
   logoutUser
 } from '../controllers/authController.js';
+import { verifyFirebaseToken } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -50,6 +51,6 @@ router.post('/refresh', refreshToken);
  * @desc    Log out current user
  * @access  Protected
  */
-router.post('/logout', logoutUser);
+router.post('/logout', verifyFirebaseToken, logoutUser);
 
 export default router;
