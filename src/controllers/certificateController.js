@@ -67,7 +67,8 @@ export async function downloadCertificate(req, res) {
 
         const certificateId = cert.certificateId;
         const issuedAt = cert.issuedAt?.toDate?.() || new Date();
-        const verifyUrl = `https://i-journey.org/verify/${certificateId}`;
+        const frontendUrl = (process.env.FRONTEND_URL || "https://www.i-journey.org").replace(/\/$/, "");
+        const verifyUrl = `${frontendUrl}/verify/${certificateId}`;
 
         const milestones = await fetchAllSubmittedMilestones(uid);
         console.log("milestones:", milestones);
