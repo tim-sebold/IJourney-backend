@@ -42,7 +42,7 @@ export const getUserProgress = async (req, res) => {
             .doc(uid)
             .get();
 
-        const progressData = progressSnap.data();
+        const progressData = progressSnap.data() || {};
         const keys = Object.keys(progressData);
         var milestones = Object.values(progressData).map((item, index) => {
             return { ...item, milestoneId: keys[index] };

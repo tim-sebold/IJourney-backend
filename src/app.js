@@ -25,7 +25,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', verifyFirebaseToken, userRoutes);
 app.use('/api/admin', verifyFirebaseToken, verifyAdminRole, adminRoutes);
 app.use('/api/courses', verifyFirebaseToken, courseRoutes);
-app.use('/api/certificates', verifyFirebaseToken, certificateRoutes);
+app.use('/api/certificates', certificateRoutes);
 // app.use('/api/chatbot', chatbotRoutes);
 
 app.use(errorHandler);
