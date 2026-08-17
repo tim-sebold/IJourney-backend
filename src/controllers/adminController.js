@@ -1,6 +1,4 @@
-import { getFirestore } from 'firebase-admin/firestore';
-import admin from 'firebase-admin';
-const db = getFirestore();
+import { admin, db } from '../config/firebaseAdmin.js';
 
 export const getAllUsers = async (req, res) => {
     try {
@@ -27,12 +25,8 @@ export const getAllUsers = async (req, res) => {
 export const getUserProgress = async (req, res) => {
     const { userId } = req.params;
     try {
-        const snapshot = await db
-            .collection('user_progress')
-            .where('userId', '==', userId)
-            .get();
-
-        const progress = snapshot.docs.map(doc => doc.data());
+        const snapshot = await db.collection('progress').doc(userId).get();
+        const progress = snapshot.exists ? snapshot.data() : {};
         res.status(200).json({ 
             success: true, 
             message: "Getting user progress is successful", 
@@ -48,16 +42,19 @@ export const getAnalytics = async (req, res) => {
     try {
         const [userSnap, progressSnap, sessionSnap] = await Promise.all([
             db.collection('users').get(),
-            db.collection('user_progress').get(),
+            db.collection('progress').get(),
             db.collection('sessions').get()
         ]);
 
         const totalUsers = userSnap.size;
-        const totalProgress = progressSnap.size;
+        const completedMilestones = progressSnap.docs.reduce((total, doc) => {
+            return total + Object.entries(doc.data())
+                .filter(([key, value]) => key !== 'certificate' && value?.completed === true).length;
+        }, 0);
         const totalChats = sessionSnap.size;
 
         const avgCompletion =
-            totalProgress > 0 ? (totalProgress / totalUsers).toFixed(2) : 0;
+            totalUsers > 0 ? (completedMilestones / totalUsers).toFixed(2) : 0;
 
         res.status(200).json({
             success: true,
@@ -96,6 +93,12 @@ export const getChatbotLogs = async (req, res) => {
 
 export const manageMilestones = async (req, res) => {
     const { milestoneId, data } = req.body;
+    if (!data || typeof data !== 'object' || Array.isArray(data) || Object.getPrototypeOf(data) !== Object.prototype) {
+        return res.status(400).json({ error: 'Milestone data must be a plain object.' });
+    }
+    if (milestoneId !== undefined && (typeof milestoneId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(milestoneId))) {
+        return res.status(400).json({ error: 'Invalid milestone ID.' });
+    }
     try {
         if (milestoneId) {
             await db.collection('milestones').doc(milestoneId).update(data);
@@ -121,8 +124,17 @@ export const manageMilestones = async (req, res) => {
 export const deleteUser = async (req, res) => {
     const { userId } = req.params;
     try {
-        await db.collection('users').doc(userId).delete();
-        await admin.auth().deleteUser(userId);
+        try {
+            await admin.auth().deleteUser(userId);
+        } catch (error) {
+            if (error?.code !== 'auth/user-not-found') throw error;
+        }
+
+        await Promise.all([
+            db.recursiveDelete(db.collection('users').doc(userId)),
+            db.recursiveDelete(db.collection('progress').doc(userId)),
+            db.recursiveDelete(db.collection('responses').doc(userId)),
+        ]);
 
         res.status(200).json({ 
             success: true, 

@@ -1,10 +1,10 @@
 // controllers/courseController.js
-import { getFirestore } from 'firebase-admin/firestore';
-const db = getFirestore();
+import { db } from '../config/firebaseAdmin.js';
+import { normalizeMilestoneKey, toProgressMilestoneKey } from '../utils/milestoneKey.js';
 
 export const getMilestoneContent = async (req, res) => {
     try {
-        const { milestoneId } = req.params;
+        const milestoneId = normalizeMilestoneKey(req.params.milestoneId);
         const doc = await db.collection('milestones').doc(milestoneId).get();
 
         if (!doc.exists)
@@ -18,7 +18,7 @@ export const getMilestoneContent = async (req, res) => {
 
 export const getMilestoneResponse = async (req, res) => {
     try {
-        const { milestoneId } = req.params;
+        const milestoneId = normalizeMilestoneKey(req.params.milestoneId);
         const userId = req.user.uid;
 
         const doc = await db.collection('responses').doc(userId)
@@ -35,7 +35,7 @@ export const getMilestoneResponse = async (req, res) => {
 
 export const submitMilestoneResponse = async (req, res) => {
     try {
-        const { milestoneId } = req.params;
+        const milestoneId = normalizeMilestoneKey(req.params.milestoneId);
         const userId = req.user.uid;
         const { responses } = req.body;
 
@@ -70,7 +70,7 @@ export const getUserProgress = async (req, res) => {
         }
 
         const progress = doc.data();
-        const completed = Object.keys(progress).filter(m => progress[m].completed);
+        const completed = Object.keys(progress).filter(m => m !== 'certificate' && progress[m]?.completed);
         const currentMilestone = completed.length + 1;
 
         res.json({ progress, currentMilestone });
@@ -82,7 +82,8 @@ export const getUserProgress = async (req, res) => {
 export const unlockNextMilestone = async (req, res) => {
     try {
         const userId = req.user.uid;
-        const { milestoneId, prevMilestoneId } = req.body;
+        const milestoneId = toProgressMilestoneKey(req.body.milestoneId);
+        const prevMilestoneId = toProgressMilestoneKey(req.body.prevMilestoneId);
 
         if (!milestoneId || !prevMilestoneId) {
             return res.status(400).json({ error: 'Missing milestoneId or prevMilestoneId.' });
@@ -99,8 +100,17 @@ export const unlockNextMilestone = async (req, res) => {
         }
 
         if (prevMilestoneId !== "start") {
+            const submittedResponse = await db.collection('responses').doc(userId)
+                .collection('milestones').doc(normalizeMilestoneKey(prevMilestoneId)).get();
+
+            if (!submittedResponse.exists || submittedResponse.data()?.status !== 'submitted') {
+                return res.status(409).json({
+                    error: 'Submit the current milestone before unlocking the next one.'
+                });
+            }
+
             await userProgressRef.set({
-                [prevMilestoneId]: { completed: true }
+                [prevMilestoneId]: { completed: true, completedAt: new Date() }
             }, { merge: true });
         }
 
@@ -123,7 +133,7 @@ export const unlockNextMilestone = async (req, res) => {
 export const saveDraftResponse = async (req, res) => {
     try {
         const userId = req.user.uid;
-        const { milestoneId } = req.params;
+        const milestoneId = normalizeMilestoneKey(req.params.milestoneId);
         const { responses } = req.body;
 
         if (!responses || typeof responses !== 'object' || Array.isArray(responses)) {

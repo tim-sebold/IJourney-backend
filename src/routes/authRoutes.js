@@ -8,22 +8,30 @@ import {
   logoutUser
 } from '../controllers/authController.js';
 import { verifyFirebaseToken } from '../middleware/authMiddleware.js';
+import { rateLimit } from 'express-rate-limit';
 
 const router = express.Router();
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts. Please try again later.' }
+});
 
 /**
  * @route   POST /auth/register
  * @desc    Register a new user
  * @access  Public
  */
-router.post('/register', registerUser);
+router.post('/register', authLimiter, registerUser);
 
 /**
  * @route   POST /auth/login
  * @desc    Authenticate user & return Firebase token
  * @access  Public
  */
-router.post('/login', loginUser);
+router.post('/login', authLimiter, loginUser);
 
 /**
  * @route   GET /auth/verify
@@ -37,14 +45,14 @@ router.get('/verify', verifyToken);
  * @desc    Send password reset email
  * @access  Public
  */
-router.post('/forgot-password', forgotPassword);
+router.post('/forgot-password', authLimiter, forgotPassword);
 
 /**
  * @route   POST /auth/refresh
  * @desc    Refresh user’s ID token
  * @access  Protected
  */
-router.post('/refresh', refreshToken);
+router.post('/refresh', authLimiter, refreshToken);
 
 /**
  * @route   POST /auth/logout

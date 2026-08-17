@@ -1,4 +1,5 @@
-export const errorHandler = (err, req, res, next) => {
+export const errorHandler = (err, req, res, _next) => {
     console.error("❌ Error:", err.message);
-    res.status(500).json({ error: err.message || "Server Error" });
+    const status = Number.isInteger(err.status) ? err.status : 500;
+    res.status(status).json({ error: status >= 500 ? "Server Error" : err.message });
 };
