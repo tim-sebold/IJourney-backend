@@ -1,19 +1,26 @@
 import { admin, db } from '../config/firebaseAdmin.js';
 
 export const registerUser = async (req, res) => {
-    const { email, password, name, role = 'user' } = req.body;
+    const { email, password, name } = req.body;
 
+    if (typeof email !== 'string' || !/^\S+@\S+\.\S+$/.test(email) ||
+        typeof password !== 'string' || password.length < 6 ||
+        typeof name !== 'string' || name.trim().length < 2) {
+        return res.status(400).json({ error: 'Provide a valid name, email, and password.' });
+    }
+
+    let userRecord;
     try {
-        const userRecord = await admin.auth().createUser({
-            email,
+        userRecord = await admin.auth().createUser({
+            email: email.trim().toLowerCase(),
             password,
-            displayName: name,
+            displayName: name.trim(),
         });
 
         await db.collection('users').doc(userRecord.uid).set({
-            name,
-            email,
-            role,
+            name: name.trim(),
+            email: email.trim().toLowerCase(),
+            role: 'user',
             createdAt: new Date(),
             lastLogin: null,
             progress: [],
@@ -26,6 +33,9 @@ export const registerUser = async (req, res) => {
             success: true
         });
     } catch (error) {
+        if (userRecord?.uid) {
+            await admin.auth().deleteUser(userRecord.uid).catch(() => {});
+        }
         res.status(400).json({ error: error.message });
     }
 };
@@ -38,8 +48,15 @@ export const loginUser = async (req, res) => {
     try {
         const decoded = await admin.auth().verifyIdToken(idToken);
         const userRef = db.collection('users').doc(decoded.uid);
+        const existingUser = await userRef.get();
 
-        await userRef.update({ lastLogin: new Date() });
+        await userRef.set({
+            email: decoded.email || null,
+            displayName: decoded.name || decoded.email || 'User',
+            name: decoded.name || decoded.email || 'User',
+            ...(!existingUser.exists ? { role: 'user', createdAt: new Date() } : {}),
+            lastLogin: new Date()
+        }, { merge: true });
 
         const userDoc = await userRef.get();
         res.json({
@@ -47,7 +64,7 @@ export const loginUser = async (req, res) => {
             user: { uid: decoded.uid, ...userDoc.data() },
             success: true
         });
-    } catch (error) {
+    } catch {
         res.status(401).json({ error: 'Invalid or expired token' });
     }
 };
@@ -66,17 +83,10 @@ export const verifyToken = async (req, res) => {
 };
 
 export const forgotPassword = async (req, res) => {
-    const { email } = req.body;
-    try {
-        const link = await admin.auth().generatePasswordResetLink(email);
-        res.json({
-            message: 'Password reset link sent',
-            link,
-            success: true
-        });
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
+    res.status(202).json({
+        message: 'If that email exists, a reset link was sent.',
+        success: true
+    });
 };
 
 export const refreshToken = async (req, res) => {
@@ -121,20 +131,6 @@ export const logoutUser = async (req, res) => {
     }
 };
 
-
-export const resetPassword = async (req, res) => {
-    const { email } = req.body;
-    try {
-        const link = await admin.auth().generatePasswordResetLink(email);
-        res.json({
-            message: 'Password reset email sent',
-            link,
-            data: ""
-        });
-    } catch (error) {
-        res.status(400).json({ error: error.message });
-    }
-};
 
 export const assignRole = async (req, res) => {
     const { uid, role } = req.body;

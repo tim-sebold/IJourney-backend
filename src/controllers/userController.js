@@ -1,9 +1,7 @@
 // controllers/userController.js
-import { getFirestore } from 'firebase-admin/firestore';
-import admin from 'firebase-admin';
+import { db } from '../config/firebaseAdmin.js';
 import { calculateProgress } from '../utils/progressUtils.js';
-
-const db = getFirestore();
+import { normalizeMilestoneKey, toProgressMilestoneKey } from '../utils/milestoneKey.js';
 
 export const getUserProfile = async (req, res) => {
     const uid = req.user.uid;
@@ -42,7 +40,7 @@ export const getUserProgress = async (req, res) => {
             .doc(uid)
             .get();
 
-        const progressData = progressSnap.data() || {};
+        const progressData = progressSnap.exists ? progressSnap.data() : {};
         const keys = Object.keys(progressData);
         var milestones = Object.values(progressData).map((item, index) => {
             return { ...item, milestoneId: keys[index] };
@@ -57,23 +55,24 @@ export const getUserProgress = async (req, res) => {
 };
 
 export const saveUserResponse = async (req, res) => {
-    const { milestoneId, formData } = req.body;
+    const milestoneId = normalizeMilestoneKey(req.body.milestoneId);
+    const { formData } = req.body;
     const uid = req.user.uid;
 
-    try {
-        await db.collection('responses').add({
-            userId: uid,
-            milestoneId,
-            formData,
-            createdAt: new Date()
-        });
+    if (!milestoneId || !formData || typeof formData !== 'object' || Array.isArray(formData)) {
+        return res.status(400).json({ error: 'Missing or invalid milestone response.' });
+    }
 
-        await db.collection('progress').doc(`${uid}_${milestoneId}`).set({
-            userId: uid,
-            milestoneId,
-            completed: true,
-            completedAt: new Date()
-        });
+    try {
+        await db.collection('responses').doc(uid).collection('milestones').doc(milestoneId).set({
+            responses: formData,
+            status: 'submitted',
+            submittedAt: new Date()
+        }, { merge: true });
+
+        await db.collection('progress').doc(uid).set({
+            [toProgressMilestoneKey(milestoneId)]: { completed: true, unlocked: true, completedAt: new Date() }
+        }, { merge: true });
 
         res.json({ success: true });
     } catch (err) {
@@ -84,12 +83,15 @@ export const saveUserResponse = async (req, res) => {
 export const getDashboardData = async (req, res) => {
     const uid = req.user.uid;
     try {
-        const [userDoc, progressSnap] = await Promise.all([
+        const [userDoc, progressDoc] = await Promise.all([
             db.collection('users').doc(uid).get(),
-            db.collection('user_progress').where('userId', '==', uid).get()
+            db.collection('progress').doc(uid).get()
         ]);
 
-        const progress = progressSnap.docs.map(doc => doc.data());
+        const progressData = progressDoc.exists ? progressDoc.data() : {};
+        const progress = Object.entries(progressData)
+            .filter(([key]) => key !== 'certificate')
+            .map(([milestoneId, value]) => ({ milestoneId, ...value }));
         const summary = calculateProgress(progress);
 
         res.json({

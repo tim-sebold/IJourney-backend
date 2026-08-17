@@ -1,6 +1,6 @@
 import PDFDocument from "pdfkit";
 import { admin } from "../config/firebaseAdmin.js";
-import { fetchAllSubmittedMilestones, normalizeMilestoneResponses } from "../services/courseService.js";
+import { assertCourseCompletedByResponses, fetchAllSubmittedMilestones, normalizeMilestoneResponses } from "../services/courseService.js";
 import { drawKeyValue, drawSectionHeader, ensureSpace } from "../utils/pdf.js";
 
 const FINAL_MILESTONE_KEY = "milestone7/4";
@@ -39,6 +39,7 @@ export async function downloadCertificate(req, res) {
         const uid = req.user.uid;
         const db = admin.firestore();
 
+        await assertCourseCompletedByResponses(uid);
         await assertCompletedViaProgress(uid);
 
         const userSnap = await db.collection("users").doc(uid).get();
@@ -114,7 +115,7 @@ export async function verifyCertificate(req, res) {
             issuedToName: cert.issuedToName,
             issuedAt: cert.issuedAt?.toDate?.() ? cert.issuedAt.toDate().toISOString() : null,
         });
-    } catch (e) {
+    } catch {
         return res.status(500).json({ valid: false, error: "Verification failed." });
     }
 }

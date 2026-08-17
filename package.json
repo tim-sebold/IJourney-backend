@@ -25,21 +25,19 @@
     "deploy": "gcloud run deploy ijouney-api --source . --region=us-central1 --platform=managed"
   },
   "dependencies": {
-    "@google-cloud/aiplatform": "^5.9.0",
-    "@google-cloud/dialogflow-cx": "^5.4.0",
-    "@google-cloud/storage": "^7.17.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
-    "firebase": "^12.4.0",
+    "express-rate-limit": "^8.6.2",
     "firebase-admin": "^13.6.1",
-    "http": "^0.0.1-security",
-    "lucide-react": "^0.575.0",
+    "helmet": "^8.3.0",
     "pdfkit": "^0.17.2",
     "winston": "^3.18.3"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "eslint": "^9.38.0",
+    "globals": "^17.11.0",
     "jest": "^30.2.0",
     "nodemon": "^3.1.10",
     "supertest": "^7.1.4"
