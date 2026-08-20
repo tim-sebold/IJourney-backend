@@ -1,26 +1,24 @@
-import admin from "firebase-admin";
+import { db } from "../config/firebaseAdmin.js";
+import { REQUIRED_RESPONSE_KEYS, toResponseKey } from "../config/courseManifest.js";
 
+/**
+ * The certificate is earned by the work itself: every milestone that collects a
+ * response must have one submitted. Content-only pages carry no response document
+ * and are deliberately not checked here — `unlockNextMilestone` is what records
+ * that they were worked through, and `assertCompletedViaProgress` cross-checks it.
+ */
 export async function assertCourseCompletedByResponses(uid) {
-    const db = admin.firestore();
-
-    const REQUIRED = [
-        "milestone7_1",
-        "milestone7_2",
-        "milestone7_3",
-        "milestone7_4",
-    ];
-
     const milestonesRef = db.collection("responses").doc(uid).collection("milestones");
 
     const snaps = await Promise.all(
-        REQUIRED.map((key) => milestonesRef.doc(key).get())
+        REQUIRED_RESPONSE_KEYS.map((key) => milestonesRef.doc(toResponseKey(key)).get())
     );
 
     const missing = [];
     const notSubmitted = [];
 
     snaps.forEach((snap, i) => {
-        const key = REQUIRED[i];
+        const key = REQUIRED_RESPONSE_KEYS[i];
         if (!snap.exists) {
             missing.push(key);
             return;
@@ -40,7 +38,6 @@ export async function assertCourseCompletedByResponses(uid) {
 }
 
 export const fetchAllSubmittedMilestones = async (uid) => {
-    const db = admin.firestore();
 
     const snap = await db
         .collection("responses")

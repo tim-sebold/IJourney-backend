@@ -1,7 +1,16 @@
 // controllers/userController.js
 import { db } from '../config/firebaseAdmin.js';
 import { calculateProgress } from '../utils/progressUtils.js';
-import { normalizeMilestoneKey, toProgressMilestoneKey } from '../utils/milestoneKey.js';
+
+/**
+ * Flattens a `progress/{uid}` document into milestone entries. The `certificate`
+ * key lives in the same document but is not a milestone — leaving it in makes it
+ * sort ahead of every real key and hijack the "current milestone" calculation.
+ */
+const toMilestoneEntries = (progressData) =>
+    Object.entries(progressData)
+        .filter(([key]) => key !== 'certificate')
+        .map(([milestoneId, value]) => ({ ...value, milestoneId }));
 
 export const getUserProfile = async (req, res) => {
     const uid = req.user.uid;
@@ -41,40 +50,10 @@ export const getUserProgress = async (req, res) => {
             .get();
 
         const progressData = progressSnap.exists ? progressSnap.data() : {};
-        const keys = Object.keys(progressData);
-        var milestones = Object.values(progressData).map((item, index) => {
-            return { ...item, milestoneId: keys[index] };
-        });
-
+        const milestones = toMilestoneEntries(progressData);
         const summary = calculateProgress(milestones);
 
-        res.json({ milestones: milestones, summary });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-};
-
-export const saveUserResponse = async (req, res) => {
-    const milestoneId = normalizeMilestoneKey(req.body.milestoneId);
-    const { formData } = req.body;
-    const uid = req.user.uid;
-
-    if (!milestoneId || !formData || typeof formData !== 'object' || Array.isArray(formData)) {
-        return res.status(400).json({ error: 'Missing or invalid milestone response.' });
-    }
-
-    try {
-        await db.collection('responses').doc(uid).collection('milestones').doc(milestoneId).set({
-            responses: formData,
-            status: 'submitted',
-            submittedAt: new Date()
-        }, { merge: true });
-
-        await db.collection('progress').doc(uid).set({
-            [toProgressMilestoneKey(milestoneId)]: { completed: true, unlocked: true, completedAt: new Date() }
-        }, { merge: true });
-
-        res.json({ success: true });
+        res.json({ milestones, summary });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -89,15 +68,13 @@ export const getDashboardData = async (req, res) => {
         ]);
 
         const progressData = progressDoc.exists ? progressDoc.data() : {};
-        const progress = Object.entries(progressData)
-            .filter(([key]) => key !== 'certificate')
-            .map(([milestoneId, value]) => ({ milestoneId, ...value }));
+        const progress = toMilestoneEntries(progressData);
         const summary = calculateProgress(progress);
 
         res.json({
-            profile: userDoc.data(),
+            profile: userDoc.exists ? userDoc.data() : null,
             progressSummary: summary,
-            totalMilestones: progress.length
+            totalMilestones: summary.total
         });
     } catch (err) {
         res.status(500).json({ error: err.message });

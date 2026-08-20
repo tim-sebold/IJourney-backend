@@ -3,7 +3,6 @@ import {
   registerUser,
   loginUser,
   verifyToken,
-  forgotPassword,
   refreshToken,
   logoutUser
 } from '../controllers/authController.js';
@@ -40,12 +39,11 @@ router.post('/login', authLimiter, loginUser);
  */
 router.get('/verify', verifyToken);
 
-/**
- * @route   POST /auth/forgot-password
- * @desc    Send password reset email
- * @access  Public
+/*
+ * Password reset has no backend route by design. The client calls Firebase's
+ * `sendPasswordResetEmail` directly, so the link is delivered out-of-band and is
+ * never returned to the caller, and Firebase applies its own rate limiting.
  */
-router.post('/forgot-password', authLimiter, forgotPassword);
 
 /**
  * @route   POST /auth/refresh

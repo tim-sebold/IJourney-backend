@@ -1,13 +1,10 @@
 import PDFDocument from "pdfkit";
-import { admin } from "../config/firebaseAdmin.js";
+import { admin, db } from "../config/firebaseAdmin.js";
 import { assertCourseCompletedByResponses, fetchAllSubmittedMilestones, normalizeMilestoneResponses } from "../services/courseService.js";
+import { CERTIFICATE_MILESTONE_KEY } from "../config/courseManifest.js";
 import { drawKeyValue, drawSectionHeader, ensureSpace } from "../utils/pdf.js";
 
-const FINAL_MILESTONE_KEY = "milestone7/4";
-
-const REQUIRED_MILESTONE_KEYS = [
-    "milestone7/4"
-];
+const FINAL_MILESTONE_KEY = CERTIFICATE_MILESTONE_KEY;
 
 function makeCertificateId() {
     const year = new Date().getFullYear();
@@ -15,20 +12,21 @@ function makeCertificateId() {
     return `IJ-${year}-${rand}`;
 }
 
+/**
+ * Cross-checks the response-based gate against recorded progress: the user must
+ * have reached the certificate page itself. `unlocked` is what we require rather
+ * than `completed` — the page is only marked complete on the way *out* of it, and
+ * the download button lives on the page.
+ */
 async function assertCompletedViaProgress(uid) {
-    const db = admin.firestore();
     const snap = await db.collection("progress").doc(uid).get();
     if (!snap.exists) throw new Error("No progress found.");
 
     const data = snap.data();
+    const node = data?.[CERTIFICATE_MILESTONE_KEY];
 
-    const missingOrIncomplete = REQUIRED_MILESTONE_KEYS.filter((k) => {
-        const node = data?.[k];
-        return !(node && node.completed === true);
-    });
-
-    if (missingOrIncomplete.length) {
-        throw new Error(`Course not completed (incomplete: ${missingOrIncomplete.join(", ")}).`);
+    if (!node || !(node.unlocked === true || node.completed === true)) {
+        throw new Error(`Course not completed (incomplete: ${CERTIFICATE_MILESTONE_KEY}).`);
     }
 
     return data;
@@ -37,8 +35,6 @@ async function assertCompletedViaProgress(uid) {
 export async function downloadCertificate(req, res) {
     try {
         const uid = req.user.uid;
-        const db = admin.firestore();
-
         await assertCourseCompletedByResponses(uid);
         await assertCompletedViaProgress(uid);
 
@@ -72,7 +68,6 @@ export async function downloadCertificate(req, res) {
         const verifyUrl = `${frontendUrl}/verify/${certificateId}`;
 
         const milestones = await fetchAllSubmittedMilestones(uid);
-        console.log("milestones:", milestones);
 
         const pdf = await buildPdfWithMilestones({
             issuedToName: cert.issuedToName,
@@ -93,8 +88,6 @@ export async function downloadCertificate(req, res) {
 export async function verifyCertificate(req, res) {
     try {
         const { certificateId } = req.params;
-        const db = admin.firestore();
-
         const q = await db
             .collection("progress")
             .where("certificate.certificateId", "==", certificateId)
