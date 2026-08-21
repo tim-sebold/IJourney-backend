@@ -20,7 +20,7 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "lint": "eslint .",
-    "test": "jest --runInBand",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
     "build": "echo 'No build step required for Express backend'",
     "deploy": "gcloud run deploy ijouney-api --source . --region=us-central1 --platform=managed"
   },

@@ -9,6 +9,7 @@ import {
     START_KEY,
     toResponseKey,
 } from '../config/courseManifest.js';
+import { buildStatementFeedback, STATEMENT_SECTION_KEYS } from '../services/statementFeedback.js';
 
 /**
  * Resolves a `:milestoneId` route param to a manifest-backed pair of keys, so no
@@ -184,6 +185,39 @@ export const saveDraftResponse = async (req, res) => {
         res.status(200).json({ message: 'Draft saved successfully.' });
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+};
+
+/** Max characters accepted per statement section — far above any real answer. */
+const MAX_SECTION_LENGTH = 2000;
+
+/**
+ * Reviews the M6.4 Journeyer's Statement draft. Reads the draft off the request so the
+ * user gets feedback on what is on screen, not on whatever they last saved.
+ */
+export const getStatementFeedback = async (req, res) => {
+    try {
+        const statement = req.body?.statement;
+
+        if (!statement || typeof statement !== 'object' || Array.isArray(statement)) {
+            return res.status(400).json({ error: 'Missing or invalid statement.' });
+        }
+
+        const trimmed = {};
+        for (const key of STATEMENT_SECTION_KEYS) {
+            const value = statement[key];
+            if (value != null && typeof value !== 'string') {
+                return res.status(400).json({ error: `Section ${key} must be text.` });
+            }
+            if (typeof value === 'string' && value.length > MAX_SECTION_LENGTH) {
+                return res.status(400).json({ error: `Section ${key} is too long.` });
+            }
+            trimmed[key] = typeof value === 'string' ? value : '';
+        }
+
+        return res.json({ feedback: buildStatementFeedback(trimmed) });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
     }
 };
 
