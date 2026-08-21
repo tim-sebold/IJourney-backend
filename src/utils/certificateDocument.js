@@ -43,13 +43,44 @@ const formatDate = (value) => {
     return date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 };
 
-/** Keeps a long display name on one line by stepping the font size down. */
-const fitFontSize = (doc, text, maxWidth, startSize, minSize) => {
-    let size = startSize;
-    while (size > minSize && doc.fontSize(size).widthOfString(text) > maxWidth) {
-        size -= 2;
+/**
+ * Sizes a display name to the space available.
+ *
+ * Names come from the user's Firebase profile and can be arbitrarily long. Stepping
+ * the size down alone is not enough — past roughly forty characters even the minimum
+ * size is wider than the frame, and with wrapping disabled the name simply runs off
+ * the edge of the page. So this falls back to a second line, and reports the height
+ * it will occupy so everything below can be positioned from it rather than guessed.
+ *
+ * @returns {{ size: number, lines: number, height: number }}
+ */
+const fitName = (doc, text, maxWidth) => {
+    const MAX_LINES = 2;
+    doc.font("Times-Bold");
+
+    for (let size = 42; size >= 20; size -= 2) {
+        if (doc.fontSize(size).widthOfString(text) <= maxWidth) {
+            return { size, lines: 1, height: doc.currentLineHeight() };
+        }
     }
-    return size;
+
+    // Too long for one line at any readable size: wrap, and shrink until it fits two.
+    for (let size = 30; size >= 16; size -= 2) {
+        doc.fontSize(size);
+        const height = doc.heightOfString(text, { width: maxWidth, align: "center" });
+        if (height <= doc.currentLineHeight() * MAX_LINES + 1) {
+            return { size, lines: MAX_LINES, height };
+        }
+    }
+
+    // Pathological (a single unbroken word longer than the page). Take the floor and
+    // let pdfkit break it — a squeezed name still beats one printed off the page.
+    doc.fontSize(16);
+    return {
+        size: 16,
+        lines: MAX_LINES,
+        height: doc.heightOfString(text, { width: maxWidth, align: "center" }),
+    };
 };
 
 const drawFrame = (doc) => {
@@ -151,25 +182,48 @@ export const buildCertificatePdf = (fields, options = {}) =>
             .text("This certifies that", left, 190, { width: contentWidth, align: "center" });
 
         const name = (issuedToName || "Participant").trim();
-        const nameSize = fitFontSize(doc, name, contentWidth, 42, 22);
-        doc.fillColor(INK).font("Times-Bold").fontSize(nameSize)
-            .text(name, left, 224, { width: contentWidth, align: "center", lineBreak: false });
+        const nameTop = 224;
+        const fitted = fitName(doc, name, contentWidth);
+        doc.fillColor(INK).font("Times-Bold").fontSize(fitted.size)
+            .text(name, left, nameTop, {
+                width: contentWidth,
+                align: "center",
+                // Only a name that already fits may be kept off the wrapper; forcing a
+                // single line on a long one is what pushed it past the frame.
+                lineBreak: fitted.lines > 1,
+            });
 
-        const nameRuleY = 224 + nameSize + 10;
+        // Measured, not assumed, so a two-line name pushes the rule and blurb down
+        // instead of being overprinted by them.
+        const nameRuleY = nameTop + fitted.height + 10;
         doc.moveTo(width / 2 - 170, nameRuleY).lineTo(width / 2 + 170, nameRuleY)
             .lineWidth(0.75).strokeColor("#CCCCCC").stroke();
 
+        const blurbTop = nameRuleY + 20;
+        const blurbWidth = contentWidth - 120;
         doc.fillColor(MUTED).font("Times-Roman").fontSize(13)
-            .text(COURSE_BLURB, left + 60, nameRuleY + 20, {
-                width: contentWidth - 120,
+            .text(COURSE_BLURB, left + 60, blurbTop, {
+                width: blurbWidth,
                 align: "center",
                 lineGap: 3,
             });
 
-        drawSeal(doc, width / 2, 378);
-
         // Footer: signature on the left, date on the right, both on ruled lines.
         const footerY = height - 150;
+
+        // The seal sits in whatever gap is left between the blurb and the footer rules,
+        // rather than at a fixed y that a two-line name would collide with.
+        const blurbBottom = blurbTop + doc.heightOfString(COURSE_BLURB, {
+            width: blurbWidth,
+            align: "center",
+            lineGap: 3,
+        });
+        const SEAL_RADIUS = 46;
+        const sealY = Math.min(
+            Math.max(blurbBottom + SEAL_RADIUS + 6, 378),
+            footerY - SEAL_RADIUS - 12
+        );
+        drawSeal(doc, width / 2, sealY);
         const blockWidth = 200;
         const rightX = width - 80 - blockWidth;
 
