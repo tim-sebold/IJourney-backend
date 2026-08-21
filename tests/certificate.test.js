@@ -113,6 +113,29 @@ describe("buildCertificatePdf", () => {
         expect(text).not.toMatch(/milestone\s*\d/i);
     });
 
+    /**
+     * Display names come from the user's own Firebase profile, so their length is not
+     * ours to assume. Text is positioned with `1 0 0 1 x y Tm`; the inner rule of the
+     * frame sits at x=38, so any run starting left of that has spilled off the design.
+     */
+    const leftmostTextX = (pdf) =>
+        Math.min(
+            ...[...pdf.toString("latin1").matchAll(/1 0 0 1 (-?[\d.]+) (-?[\d.]+) Tm/g)].map((m) => +m[1])
+        );
+
+    it.each([
+        ["a short name", "Ana Diaz"],
+        ["a long hyphenated name", "Maximilliana Adaeze Okonkwo-Vandersteen III"],
+        ["a name longer than the page", "Wolfeschlegelsteinhausenbergerdorff Von Habsburg-Lothringen Esquire the Third"],
+        ["an unbroken run of characters", "A".repeat(90)],
+    ])("keeps %s inside the frame and on one page", async (_label, issuedToName) => {
+        const pdf = await buildCertificatePdf({ ...FIELDS, issuedToName }, { compress: false });
+
+        expect(leftmostTextX(pdf)).toBeGreaterThanOrEqual(38);
+        expect((pdf.toString("latin1").match(/\/Type\s*\/Page[^s]/g) || []).length).toBe(1);
+        expect(extractText(pdf)).toContain("CERTIFICATE OF COMPLETION");
+    });
+
     it("falls back to a neutral name rather than an empty certificate", async () => {
         const text = await renderText({ ...FIELDS, issuedToName: "" });
         expect(text).toContain("Participant");

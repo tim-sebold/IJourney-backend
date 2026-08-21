@@ -50,12 +50,31 @@ export const STATEMENT_SECTION_KEYS = SECTIONS.map((s) => s.key);
 /** Hedges that weaken a commitment. */
 const HEDGES = ['maybe', 'hopefully', 'kind of', 'sort of', 'try to', 'i guess', 'probably', 'someday'];
 
-/** Signals that a sentence names something concrete rather than a generic virtue. */
-const SPECIFIC_MARKERS = /\b(because|so that|by|when|through|for|with|at|in order to)\b/i;
+/**
+ * Signals that a sentence explains itself rather than just asserting a virtue.
+ * Deliberately limited to connectives that introduce a reason or a method —
+ * bare prepositions like "for" or "at" appear in almost every sentence and would
+ * make this nudge fire at random.
+ */
+const SPECIFIC_MARKERS = /\b(because|so that|in order to|through|by \w+ing|whenever|when i)\b/i;
 
-/** Signals that a commitment can be checked off. */
-const MEASURABLE_MARKERS =
-    /(\b\d+\b|\bevery\b|\bweek\b|\bweekly\b|\bmonth\b|\bmonthly\b|\byear\b|\bdaily\b|\beach day\b|\bby \w+ \d{4}\b|\bwithin\b)/i;
+/**
+ * Signals that a commitment can be checked off. Quantities are written out as often
+ * as they are typed as digits ("two students each semester"), so word-numbers and
+ * period nouns count just as much as `\d+`.
+ */
+const MEASURABLE_MARKERS = new RegExp(
+    [
+        '\\d+',
+        '\\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|dozen)\\b',
+        '\\b(once|twice)\\b',
+        '\\b(every|each|per)\\b',
+        '\\b(daily|weekly|monthly|quarterly|yearly|annually)\\b',
+        '\\b(day|week|month|year|semester|term|quarter|summer|morning|evening)s?\\b',
+        '\\b(within|before|after|until|by the end of)\\b',
+    ].join('|'),
+    'i'
+);
 
 const words = (text) => text.trim().split(/\s+/).filter(Boolean);
 
@@ -75,6 +94,7 @@ function reviewSection(section, text) {
             status: 'empty',
             wordCount: 0,
             suggestions: [`"${section.label}..." is still blank. Write a sentence about ${section.prompt}.`],
+            optional: [],
         };
     }
 
@@ -104,16 +124,20 @@ function reviewSection(section, text) {
     // is an invitation rather than a fault — it never holds a section back.
     if (!SPECIFIC_MARKERS.test(text)) {
         optional.push(
-            'Optional: add the "why" or the "how" — words like "because", "so that" or "by" turn a label into evidence.'
+            'Add the "why" or the "how" — "because", "so that" or "by doing X" turns a label into evidence.'
         );
     }
 
+    // Kept in two lists, not one: the UI marks a strong section with a green tick, and
+    // a lone "optional" bullet underneath it read as an unresolved fault when the two
+    // were concatenated.
     return {
         key: section.key,
         label: section.label,
         status: blocking.length === 0 ? 'strong' : 'needs-work',
         wordCount,
-        suggestions: [...blocking, ...optional],
+        suggestions: blocking,
+        optional,
     };
 }
 
@@ -139,6 +163,12 @@ export function buildStatementFeedback(statement = {}) {
             `Fill in ${empty.map((s) => `"${s.label}"`).join(', ')} and run this again.`;
     } else if (strong.length === SECTIONS.length) {
         summary = 'All five sections are specific, committed and measurable. This is ready to finalize.';
+    } else if (strong.length === 0) {
+        // "0 of 5 sections are already strong" is a discouraging thing to tell a
+        // teenager about their own vision statement. Same information, forward-looking.
+        summary =
+            'All five sections are written — now they need sharpening. Work through the notes ' +
+            'below and run this again; each one is a small edit, not a rewrite.';
     } else {
         summary =
             `${strong.length} of ${SECTIONS.length} sections are already strong. ` +
