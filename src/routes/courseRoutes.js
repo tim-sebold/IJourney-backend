@@ -6,6 +6,7 @@ import {
     unlockNextMilestone,
     saveDraftResponse,
     getAllMilestones,
+    getStatementFeedback,
 } from '../controllers/courseController.js';
 
 const router = express.Router();
@@ -13,6 +14,8 @@ const router = express.Router();
 router.get('/', getAllMilestones);
 
 router.post('/unlock', unlockNextMilestone);
+
+router.post('/statement-feedback', getStatementFeedback);
 
 router.get('/:milestoneId/getResponse', getMilestoneResponse);
 

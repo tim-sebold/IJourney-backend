@@ -1,13 +1,9 @@
-import PDFDocument from "pdfkit";
-import { admin } from "../config/firebaseAdmin.js";
-import { assertCourseCompletedByResponses, fetchAllSubmittedMilestones, normalizeMilestoneResponses } from "../services/courseService.js";
-import { drawKeyValue, drawSectionHeader, ensureSpace } from "../utils/pdf.js";
+import { admin, db } from "../config/firebaseAdmin.js";
+import { assertCourseCompletedByResponses } from "../services/courseService.js";
+import { CERTIFICATE_MILESTONE_KEY } from "../config/courseManifest.js";
+import { buildCertificatePdf } from "../utils/certificateDocument.js";
 
-const FINAL_MILESTONE_KEY = "milestone7/4";
-
-const REQUIRED_MILESTONE_KEYS = [
-    "milestone7/4"
-];
+const FINAL_MILESTONE_KEY = CERTIFICATE_MILESTONE_KEY;
 
 function makeCertificateId() {
     const year = new Date().getFullYear();
@@ -15,20 +11,21 @@ function makeCertificateId() {
     return `IJ-${year}-${rand}`;
 }
 
+/**
+ * Cross-checks the response-based gate against recorded progress: the user must
+ * have reached the certificate page itself. `unlocked` is what we require rather
+ * than `completed` — the page is only marked complete on the way *out* of it, and
+ * the download button lives on the page.
+ */
 async function assertCompletedViaProgress(uid) {
-    const db = admin.firestore();
     const snap = await db.collection("progress").doc(uid).get();
     if (!snap.exists) throw new Error("No progress found.");
 
     const data = snap.data();
+    const node = data?.[CERTIFICATE_MILESTONE_KEY];
 
-    const missingOrIncomplete = REQUIRED_MILESTONE_KEYS.filter((k) => {
-        const node = data?.[k];
-        return !(node && node.completed === true);
-    });
-
-    if (missingOrIncomplete.length) {
-        throw new Error(`Course not completed (incomplete: ${missingOrIncomplete.join(", ")}).`);
+    if (!node || !(node.unlocked === true || node.completed === true)) {
+        throw new Error(`Course not completed (incomplete: ${CERTIFICATE_MILESTONE_KEY}).`);
     }
 
     return data;
@@ -37,8 +34,6 @@ async function assertCompletedViaProgress(uid) {
 export async function downloadCertificate(req, res) {
     try {
         const uid = req.user.uid;
-        const db = admin.firestore();
-
         await assertCourseCompletedByResponses(uid);
         await assertCompletedViaProgress(uid);
 
@@ -71,15 +66,12 @@ export async function downloadCertificate(req, res) {
         const frontendUrl = (process.env.FRONTEND_URL || "https://www.i-journey.org").replace(/\/$/, "");
         const verifyUrl = `${frontendUrl}/verify/${certificateId}`;
 
-        const milestones = await fetchAllSubmittedMilestones(uid);
-        console.log("milestones:", milestones);
-
-        const pdf = await buildPdfWithMilestones({
+        // Only these four fields ever reach the document — see `CERTIFICATE_FIELDS`.
+        const pdf = await buildCertificatePdf({
             issuedToName: cert.issuedToName,
             certificateId,
             issuedAt,
             verifyUrl,
-            milestones,
         });
 
         res.setHeader("Content-Type", "application/pdf");
@@ -93,8 +85,6 @@ export async function downloadCertificate(req, res) {
 export async function verifyCertificate(req, res) {
     try {
         const { certificateId } = req.params;
-        const db = admin.firestore();
-
         const q = await db
             .collection("progress")
             .where("certificate.certificateId", "==", certificateId)
@@ -118,86 +108,4 @@ export async function verifyCertificate(req, res) {
     } catch {
         return res.status(500).json({ valid: false, error: "Verification failed." });
     }
-}
-
-export const addCertificateCoverPage = (doc, { issuedToName, certificateId, issuedAt, verifyUrl }) => {
-    doc.fontSize(26).text("Certificate of Completion", { align: "center" });
-    doc.moveDown(0.5);
-    doc.fontSize(16).text("iJourney: A Path to Purpose", { align: "center" });
-
-    doc.moveDown(2);
-    doc.fontSize(14).text("This certifies that", { align: "center" });
-    doc.moveDown(0.8);
-    doc.fontSize(22).text(issuedToName || "Participant", { align: "center" });
-
-    doc.moveDown(2);
-    doc.fontSize(12).text(`Certificate ID: ${certificateId}`, { align: "center" });
-    doc.fontSize(12).text(`Issued on: ${new Date(issuedAt).toDateString()}`, { align: "center" });
-
-    doc.moveDown(2);
-    doc.fontSize(10).text(`Verify at: ${verifyUrl}`, { align: "center" });
-}
-
-export const addMilestoneSection = (doc, milestoneId, entries) => {
-    doc.addPage();
-    doc.fontSize(18).text(`Milestone: ${milestoneId}`, { underline: true });
-    doc.moveDown(1);
-
-    if (!entries.length) {
-        doc.fontSize(12).text("No responses saved.");
-        return;
-    }
-
-    entries.forEach(({ key, value }) => {
-        doc.fontSize(12).text(`${key}:`, { continued: false });
-        doc.fontSize(11).text(value || "-", { indent: 20 });
-        doc.moveDown(0.6);
-    });
-}
-
-export const buildPdfWithMilestones = async ({
-    issuedToName,
-    certificateId,
-    issuedAt,
-    verifyUrl,
-    milestones,
-}) => {
-    return new Promise((resolve) => {
-        const doc = new PDFDocument({ size: "A4", margin: 50 });
-        const chunks = [];
-
-        doc.on("data", (c) => chunks.push(c));
-        doc.on("end", () => resolve(Buffer.concat(chunks)));
-
-        // ---- Cover page (keep as-is) ----
-        addCertificateCoverPage(doc, { issuedToName, certificateId, issuedAt, verifyUrl });
-
-        // Move to summary section on SAME PAGE if space, otherwise add only one page
-        doc.moveDown(2);
-        const summaryTitle = "Your Milestone Responses (Summary)";
-        ensureSpace(doc, doc.heightOfString(summaryTitle) + 20);
-        doc.fontSize(16).text(summaryTitle);
-        doc.moveDown(0.5);
-        doc.fontSize(10).text(
-            "This summary includes your submitted milestone entries.",
-            { opacity: 0.9 }
-        );
-        doc.moveDown(1);
-
-        milestones.forEach((m) => {
-            const entries = normalizeMilestoneResponses(m); // your existing function
-            drawSectionHeader(doc, `Milestone: ${m.id}`);
-
-            if (!entries.length) {
-                drawKeyValue(doc, "Responses", "No responses saved.");
-                return;
-            }
-
-            entries.forEach(({ key, value }) => {
-                drawKeyValue(doc, key, value);
-            });
-        });
-
-        doc.end();
-    });
 }

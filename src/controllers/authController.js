@@ -82,22 +82,23 @@ export const verifyToken = async (req, res) => {
     }
 };
 
-export const forgotPassword = async (req, res) => {
-    res.status(202).json({
-        message: 'If that email exists, a reset link was sent.',
-        success: true
-    });
-};
-
 export const refreshToken = async (req, res) => {
     const { refreshToken } = req.body;
+
+    if (typeof refreshToken !== 'string' || !refreshToken.trim()) {
+        return res.status(400).json({ error: 'Missing refresh token' });
+    }
+
     try {
         const response = await fetch(
-            `https://securetoken.googleapis.com/v1/token?key=${process.env.FIREBASE_API_KEY}`,
+            `https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(process.env.FIREBASE_API_KEY ?? '')}`,
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `grant_type=refresh_token&refresh_token=${refreshToken}`,
+                body: new URLSearchParams({
+                    grant_type: 'refresh_token',
+                    refresh_token: refreshToken.trim(),
+                }).toString(),
             }
         );
 
@@ -132,13 +133,25 @@ export const logoutUser = async (req, res) => {
 };
 
 
+const ASSIGNABLE_ROLES = new Set(['user', 'admin']);
+
 export const assignRole = async (req, res) => {
     const { uid, role } = req.body;
+
+    if (typeof uid !== 'string' || !uid.trim()) {
+        return res.status(400).json({ error: 'A uid is required.' });
+    }
+    if (typeof role !== 'string' || !ASSIGNABLE_ROLES.has(role)) {
+        return res.status(400).json({
+            error: `Role must be one of: ${[...ASSIGNABLE_ROLES].join(', ')}.`
+        });
+    }
+
     try {
-        await admin.auth().setCustomUserClaims(uid, { role });
-        await db.collection('users').doc(uid).update({ role });
-        res.json({ 
-            message: `Role '${role}' assigned to user ${uid}`,
+        await admin.auth().setCustomUserClaims(uid.trim(), { role });
+        await db.collection('users').doc(uid.trim()).set({ role }, { merge: true });
+        res.json({
+            message: `Role '${role}' assigned to user ${uid.trim()}`,
             success: true,
             data: ""
         });
