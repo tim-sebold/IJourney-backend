@@ -6,6 +6,7 @@ import {
     unlockNextMilestone,
     saveDraftResponse,
     getAllMilestones,
+    getAllResponses,
     getStatementFeedback,
 } from '../controllers/courseController.js';
 
@@ -14,6 +15,9 @@ const router = express.Router();
 router.get('/', getAllMilestones);
 
 router.post('/unlock', unlockNextMilestone);
+
+// Declared ahead of `/:milestoneId`, which would otherwise swallow it.
+router.get('/responses', getAllResponses);
 
 router.post('/statement-feedback', getStatementFeedback);
 
