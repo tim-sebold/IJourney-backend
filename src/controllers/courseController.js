@@ -5,6 +5,8 @@ import {
     COMPLETED_KEY,
     isImmediateSuccessor,
     isKnownMilestone,
+    milestoneIndex,
+    REQUIRED_RESPONSE_KEYS,
     requiresResponse,
     START_KEY,
     toResponseKey,
@@ -53,6 +55,54 @@ export const getMilestoneResponse = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 }
+
+/** Firestore Timestamps and plain Dates both reach the client as ISO strings. */
+const toIsoDate = (value) => {
+    if (!value) return null;
+    if (typeof value.toDate === 'function') return value.toDate().toISOString();
+    if (value instanceof Date) return value.toISOString();
+    return null;
+};
+
+/**
+ * Everything the user has saved, in one read. The recap page shows the whole
+ * journey at once, and fetching it milestone by milestone would be ~30 round
+ * trips. `required` travels with it so the client can tell "nothing to answer
+ * here" apart from "not answered yet" without duplicating the manifest.
+ */
+export const getAllResponses = async (req, res) => {
+    try {
+        const userId = req.user.uid;
+
+        const snapshot = await db.collection('responses').doc(userId)
+            .collection('milestones').get();
+
+        const responses = {};
+
+        for (const doc of snapshot.docs) {
+            const progressKey = toProgressMilestoneKey(doc.id);
+            // Documents left behind by a removed or renamed milestone stay server-side.
+            if (!isKnownMilestone(progressKey)) continue;
+
+            const data = doc.data() || {};
+            responses[progressKey] = {
+                responses: data.responses ?? {},
+                status: data.status === 'submitted' ? 'submitted' : 'draft',
+                submittedAt: toIsoDate(data.submittedAt) ?? toIsoDate(data.updatedAt),
+            };
+        }
+
+        const ordered = Object.fromEntries(
+            Object.entries(responses).sort(
+                ([a], [b]) => milestoneIndex(a) - milestoneIndex(b)
+            )
+        );
+
+        res.json({ responses: ordered, required: REQUIRED_RESPONSE_KEYS });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
 
 export const submitMilestoneResponse = async (req, res) => {
     try {
