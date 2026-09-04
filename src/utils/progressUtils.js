@@ -8,7 +8,10 @@ import { MILESTONE_ORDER, TOTAL_MILESTONES } from '../config/courseManifest.js';
  */
 export const calculateProgress = (progressData) => {
     const byId = new Map(progressData.map(entry => [entry.milestoneId, entry]));
-    const completed = progressData.filter(p => p.completed).length;
+    // Only milestones the course still contains count towards the total. A step
+    // removed by a content revision leaves its `completed` entry behind in the
+    // user's progress map, which would otherwise push the bar past 100%.
+    const completed = MILESTONE_ORDER.filter(key => byId.get(key)?.completed).length;
     const total = TOTAL_MILESTONES;
 
     const currentMilestone = MILESTONE_ORDER.find(key => !byId.get(key)?.completed) ?? null;
