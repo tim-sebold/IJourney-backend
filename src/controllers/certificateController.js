@@ -75,7 +75,7 @@ export async function downloadCertificate(req, res) {
         });
 
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="iJourney-Certificate-${certificateId}.pdf"`);
+        res.setHeader("Content-Disposition", `attachment; filename="iJOURNEY-Certificate-${certificateId}.pdf"`);
         return res.status(200).send(pdf);
     } catch (e) {
         return res.status(400).json({ error: e instanceof Error ? e.message : "Download failed." });
@@ -101,7 +101,7 @@ export async function verifyCertificate(req, res) {
         return res.json({
             valid: true,
             certificateId: cert.certificateId,
-            courseTitle: "iJourney: A Path to Purpose",
+            courseTitle: "iJOURNEY: A Path to Purpose",
             issuedToName: cert.issuedToName,
             issuedAt: cert.issuedAt?.toDate?.() ? cert.issuedAt.toDate().toISOString() : null,
         });
