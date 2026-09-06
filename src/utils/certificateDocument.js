@@ -19,7 +19,7 @@ export const CERTIFICATE_FIELDS = Object.freeze([
     "verifyUrl",
 ]);
 
-const COURSE_TITLE = "iJourney: A Path to Purpose";
+const COURSE_TITLE = "iJOURNEY: A Path to Purpose";
 const COURSE_BLURB =
     "has successfully completed the seven-milestone journey of self-discovery, emotional " +
     "intelligence, career exploration and purpose.";
@@ -148,8 +148,8 @@ export const buildCertificatePdf = (fields, options = {}) =>
             margin: 0,
             compress: options.compress !== false,
             info: {
-                Title: "iJourney Certificate of Completion",
-                Author: "iJourney",
+                Title: "iJOURNEY Certificate of Completion",
+                Author: "iJOURNEY",
                 Subject: COURSE_TITLE,
             },
         });
