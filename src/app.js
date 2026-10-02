@@ -43,7 +43,7 @@ app.use(cors({
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/', (req, res) => {
-  res.send('iJourney backend is running ✅. Use /api/... endpoints.');
+  res.send('iJOURNEY backend is running ✅. Use /api/... endpoints.');
 });
 app.use('/api/auth', authRoutes);
 app.use('/api/user', verifyFirebaseToken, userRoutes);
