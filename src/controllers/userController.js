@@ -23,16 +23,57 @@ export const getUserProfile = async (req, res) => {
     }
 };
 
+const MAX_NAME_LENGTH = 80;
+const MAX_AVATAR_URL_LENGTH = 2048;
+const GENDERS = new Set(['female', 'male', 'nonbinary', 'prefer_not_say', '']);
+const COUNTRIES = new Set(['us', 'ca', 'uk', 'au', 'in', '']);
+
+const isPlainObject = (value) =>
+    !!value && typeof value === 'object' && !Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Object.prototype;
+
+/**
+ * One validator per field a user may change about themselves. Anything not
+ * listed — `role`, `schoolCode`, `email`, `createdAt` — cannot be written through
+ * this endpoint at all, whatever the request body carries.
+ */
+const PROFILE_FIELDS = {
+    name: (value) => typeof value === 'string' &&
+        value.trim().length >= 2 && value.trim().length <= MAX_NAME_LENGTH,
+    displayName: (value) => typeof value === 'string' &&
+        value.trim().length >= 2 && value.trim().length <= MAX_NAME_LENGTH,
+    gender: (value) => GENDERS.has(value),
+    country: (value) => COUNTRIES.has(value),
+    // Holds the Storage download URL of the avatar, despite the legacy name.
+    avatarBase64: (value) => value === '' || (typeof value === 'string' &&
+        value.length <= MAX_AVATAR_URL_LENGTH && /^https:\/\//.test(value)),
+    preferences: isPlainObject,
+};
+
 export const updateUserProfile = async (req, res) => {
     const uid = req.user.uid;
-    const { displayName, preferences } = req.body;
+    const body = isPlainObject(req.body) ? req.body : {};
+
+    // Only the fields that were actually sent are written. Firestore rejects
+    // `undefined`, so passing the body straight through turned a request that
+    // carried just one field into a 500.
+    const update = {};
+
+    for (const [field, isValid] of Object.entries(PROFILE_FIELDS)) {
+        const value = body[field];
+        if (value === undefined) continue;
+        if (!isValid(value)) {
+            return res.status(400).json({ error: `Invalid value for ${field}.` });
+        }
+        update[field] = typeof value === 'string' ? value.trim() : value;
+    }
+
+    if (Object.keys(update).length === 0) {
+        return res.status(400).json({ error: 'Nothing to update.' });
+    }
 
     try {
-        await db.collection('users').doc(uid).update({
-            displayName,
-            preferences,
-            updatedAt: new Date(),
-        });
+        await db.collection('users').doc(uid).set({ ...update, updatedAt: new Date() }, { merge: true });
 
         res.json({ success: true, message: 'Profile updated' });
     } catch (err) {

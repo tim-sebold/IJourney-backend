@@ -19,6 +19,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
+    "make-admin": "node scripts/make-admin.js",
     "lint": "eslint .",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
     "build": "echo 'No build step required for Express backend'",

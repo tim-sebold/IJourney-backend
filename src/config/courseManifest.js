@@ -34,9 +34,10 @@ const MILESTONES = [
     { key: 'milestone2/7', requiresResponse: false },
     { key: 'milestone2/8', requiresResponse: true },
     { key: 'milestone2/9', requiresResponse: true },
-    // 2026-09-06 content revision: "Gems In Treasure Chest" and "The 24 Character
-    // Strengths" were cut and "Oasis Summary & Commit" moved up into 2/10, so M2
-    // is now ten steps and carries no response gate after 2/9.
+    // 2026-09-06: the frontend dropped "Gems In Treasure Chest" and "The 24
+    // Character Strengths", so M2 is ten steps and 2/10 is "Oasis Summary &
+    // Commit", which collects nothing. `milestone2_11` response documents saved
+    // before that are orphans now; readers skip keys the manifest does not know.
     { key: 'milestone2/10', requiresResponse: false },
 
     // 2026-09-04 content revision: M3 was resequenced to 1, 6, 2, 3, 5, 4, 7, so

@@ -3,11 +3,11 @@ import {
     getAllUsers,
     getUserProgress,
     getAnalytics,
-    getChatbotLogs,
     manageMilestones,
     deleteUser
 } from '../controllers/adminController.js';
 import { assignRole } from '../controllers/authController.js';
+import { createSchool, listSchools, updateSchool } from '../controllers/schoolController.js';
 import { verifyAdminRole } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -21,8 +21,11 @@ router.get('/users', getAllUsers);
 router.post('/role', assignRole);
 router.get('/progress/:userId', getUserProgress);
 router.get('/analytics', getAnalytics);
-router.get('/chatlogs', getChatbotLogs);
 router.post('/milestones', manageMilestones);
 router.delete('/user/:userId', deleteUser);
+
+router.get('/schools', listSchools);
+router.post('/schools', createSchool);
+router.patch('/schools/:code', updateSchool);
 
 export default router;

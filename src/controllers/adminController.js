@@ -40,10 +40,9 @@ export const getUserProgress = async (req, res) => {
 
 export const getAnalytics = async (req, res) => {
     try {
-        const [userSnap, progressSnap, sessionSnap] = await Promise.all([
+        const [userSnap, progressSnap] = await Promise.all([
             db.collection('users').get(),
-            db.collection('progress').get(),
-            db.collection('sessions').get()
+            db.collection('progress').get()
         ]);
 
         const totalUsers = userSnap.size;
@@ -51,8 +50,6 @@ export const getAnalytics = async (req, res) => {
             return total + Object.entries(doc.data())
                 .filter(([key, value]) => key !== 'certificate' && value?.completed === true).length;
         }, 0);
-        const totalChats = sessionSnap.size;
-
         const avgCompletion =
             totalUsers > 0 ? (completedMilestones / totalUsers).toFixed(2) : 0;
 
@@ -61,33 +58,12 @@ export const getAnalytics = async (req, res) => {
             message: "Getting analytics is successful",
             data: {
                 totalUsers,
-                totalChats,
                 avgCompletion
             }
         });
     } catch (error) {
         console.error('Error fetching analytics:', error);
         res.status(500).json({ error: 'Failed to fetch analytics' });
-    }
-};
-
-export const getChatbotLogs = async (req, res) => {
-    try {
-        const snapshot = await db
-            .collection('sessions')
-            .orderBy('createdAt', 'desc')
-            .limit(50)
-            .get();
-
-        const logs = snapshot.docs.map(doc => doc.data());
-        res.status(200).json({ 
-            success: true, 
-            message: "Getting chatbot logs is successful", 
-            data: { logs } 
-        });
-    } catch (error) {
-        console.error('Error fetching chatbot logs:', error);
-        res.status(500).json({ error: 'Failed to fetch logs' });
     }
 };
 
