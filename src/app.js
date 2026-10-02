@@ -15,6 +15,11 @@ config();
 
 const app = express();
 
+// Render (and Cloud Run) terminate TLS at a proxy, so without this every request
+// appears to come from the proxy's address and the auth rate limiter counts all
+// users as one client. `TRUST_PROXY` is the number of proxy hops to trust.
+app.set('trust proxy', Number.parseInt(process.env.TRUST_PROXY ?? '1', 10) || 0);
+
 const allowedOrigins = new Set([
   process.env.FRONTEND_URL,
   ...(process.env.FRONTEND_URLS || '').split(','),

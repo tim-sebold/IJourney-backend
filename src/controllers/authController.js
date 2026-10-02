@@ -1,12 +1,31 @@
 import { admin, db } from '../config/firebaseAdmin.js';
+import { findActiveSchool } from './schoolController.js';
 
 export const registerUser = async (req, res) => {
-    const { email, password, name } = req.body;
+    const { email, password, name, schoolCode } = req.body;
 
     if (typeof email !== 'string' || !/^\S+@\S+\.\S+$/.test(email) ||
         typeof password !== 'string' || password.length < 6 ||
         typeof name !== 'string' || name.trim().length < 2) {
         return res.status(400).json({ error: 'Provide a valid name, email, and password.' });
+    }
+
+    // The school code is optional, but one that was typed must be real: silently
+    // dropping a mistyped code would leave the student uncounted for their school.
+    // It is checked before `createUser` so a bad code never half-creates an account.
+    const hasSchoolCode = schoolCode != null && schoolCode !== '';
+    let school = null;
+    if (hasSchoolCode) {
+        try {
+            school = await findActiveSchool(schoolCode);
+        } catch {
+            return res.status(500).json({ error: 'Could not check the school code. Please try again.' });
+        }
+        if (!school) {
+            return res.status(400).json({
+                error: 'That school code was not recognised. Check it with your teacher, or leave it blank.'
+            });
+        }
     }
 
     let userRecord;
@@ -24,7 +43,8 @@ export const registerUser = async (req, res) => {
             createdAt: new Date(),
             lastLogin: null,
             progress: [],
-            displayName: name
+            displayName: name.trim(),
+            ...(school ? { schoolCode: school.code } : {}),
         });
 
         res.status(201).json({

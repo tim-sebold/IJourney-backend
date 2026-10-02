@@ -1,5 +1,5 @@
 import { admin, db } from "../config/firebaseAdmin.js";
-import { assertCourseCompletedByResponses } from "../services/courseService.js";
+import { assertCourseCompletedByResponses, CourseIncompleteError } from "../services/courseService.js";
 import { CERTIFICATE_MILESTONE_KEY } from "../config/courseManifest.js";
 import { buildCertificatePdf } from "../utils/certificateDocument.js";
 
@@ -78,6 +78,9 @@ export async function downloadCertificate(req, res) {
         res.setHeader("Content-Disposition", `attachment; filename="iJourney-Certificate-${certificateId}.pdf"`);
         return res.status(200).send(pdf);
     } catch (e) {
+        if (e instanceof CourseIncompleteError) {
+            return res.status(409).json({ error: e.message, outstanding: e.outstanding });
+        }
         return res.status(400).json({ error: e instanceof Error ? e.message : "Download failed." });
     }
 }

@@ -10,9 +10,14 @@ import { verifyFirebaseToken } from '../middleware/authMiddleware.js';
 import { rateLimit } from 'express-rate-limit';
 
 const router = express.Router();
+// Counted per client address, which is only meaningful because `app.js` sets
+// `trust proxy`. The ceiling has to clear a classroom: a school shares one public
+// address, so thirty students signing up and logging in during the same lesson are
+// one "client" here. Password guessing is not what this guards — Firebase checks
+// passwords and throttles them itself — it caps account-creation and token spam.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 30,
+  limit: 150,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   message: { error: 'Too many authentication attempts. Please try again later.' }
